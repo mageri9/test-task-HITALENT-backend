@@ -1,6 +1,12 @@
-import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://org_user:org_pass@db:5432/org_structure"
-)
+
+class Settings(BaseSettings):
+    DATABASE_URL: str
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
+
+settings = Settings()
