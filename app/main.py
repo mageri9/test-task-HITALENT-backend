@@ -5,6 +5,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
+from app.core.exceptions import AppException, NotFoundException, ConflictException
+from app.core.handlers import (
+    not_found_exception_handler,
+    conflict_exception_handler,
+    app_exception_handler,
+)
 
 
 @asynccontextmanager
@@ -17,6 +23,11 @@ async def lifespan(app: FastAPI):
     engine.dispose()
 
 app = FastAPI(title="Organization Structure API", lifespan=lifespan)
+
+
+app.add_exception_handler(NotFoundException, not_found_exception_handler)
+app.add_exception_handler(ConflictException, conflict_exception_handler)
+app.add_exception_handler(AppException, app_exception_handler)
 
 
 @app.get("/health")
