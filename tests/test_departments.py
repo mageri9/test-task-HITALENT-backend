@@ -1,3 +1,6 @@
+from http.client import responses
+
+
 class TestCreateDepartment:
     def test_success(self, client):
         response = client.post(
@@ -76,3 +79,83 @@ class TestDepartmentNameUniqueness:
 
         assert response.status_code == 409
         assert "already exists" in response.json()["detail"].lower()
+
+
+class TestDepartmentMove:
+    def test_cannot_be_own_parent(self, client):
+        """Department cannot be its own parent."""
+        dept = client.post("/departments/", json={"name": "Solo"})
+        dept_id = dept.json()["id"]
+
+        response = client.patch(f"/departments/{dept_id}", json={"parent_id": dept_id})
+
+        assert response.status_code == 409
+        assert "own parent" in response.json()["detail"].lower()
+
+    def test_cannot_move_into_descendant(self, client):
+        """Cannot move a department into its own subtree (cycle prevention).
+
+        Tree: A -> B -> C
+        Action: move A under C
+        Expected: 409
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+
+        b = client.post("/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+
+        c = client.post("/departments/", json={"name": "C", "parent_id": b_id})
+        c_id = c.json()["id"]
+
+        response = client.patch(f"/departments/{a_id}", json={"parent_id": c_id})
+
+        assert response.status_code == 409
+        assert "subtree" in response.json()["detail"].lower()
+
+    def test_can_move_to_another_branch(self, client):
+        """Can move a department to a different branch.
+
+        Tree:  A -> B,  X -> Y
+        Action: move B under X
+        Expected: 200, parent_id = X
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+        b = client.post("/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+
+        x = client.post("/departments/", json={"name": "X"})
+        x_id = x.json()["id"]
+        client.post("/departments/", json={"name": "Y", "parent_id": x_id})
+
+        response = client.patch(f"/departments/{b_id}", json={"parent_id": x_id})
+
+        assert response.status_code == 200
+        assert response.json()["parent_id"] == x_id
+
+    def test_can_make_root(self, client):
+        """Can detach from parent and make department root.
+
+        Tree:  A -> B
+        Action: set B.parent_id = null
+        Expected: 200, parent_id = null
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+        b = client.post("/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+
+        response = client.patch(f"/departments/{b_id}", json={"parent_id": None})
+
+        assert response.status_code == 200
+        assert response.json()["parent_id"] is None
+
+    def test_cannot_move_to_nonexistent_parent(self, client):
+        """Cannot move to a department that doesn't exist."""
+        dept = client.post("/departments/", json={"name": "A"})
+        dept_id = dept.json()["id"]
+
+        response = client.patch(f"/departments/{dept_id}", json={"parent_id": 999})
+
+        assert response.status_code == 404
