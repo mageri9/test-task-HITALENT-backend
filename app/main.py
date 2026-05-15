@@ -11,6 +11,8 @@ from app.core.handlers import (
     conflict_exception_handler,
     app_exception_handler,
 )
+from app.api.v1.departments import router as department_router
+from app.api.v1.employees import router as employees_router
 
 
 @asynccontextmanager
@@ -24,11 +26,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Organization Structure API", lifespan=lifespan)
 
-
+# Exception handlers
 app.add_exception_handler(NotFoundException, not_found_exception_handler)
 app.add_exception_handler(ConflictException, conflict_exception_handler)
 app.add_exception_handler(AppException, app_exception_handler)
 
+# Routers
+app.include_router(department_router, prefix="/departments", tags=["Departments"])
+app.include_router(employees_router, prefix="/departments", tags=["Employees"])
 
 @app.get("/health")
 async def health_check():
