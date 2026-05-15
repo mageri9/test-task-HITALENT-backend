@@ -29,6 +29,7 @@ services:
       - ./tests:/app/tests
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
+      - ./pytest.ini:/app/pytest.ini
 
 volumes:
   pgdata:
