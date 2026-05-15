@@ -37,3 +37,42 @@ class TestCreateDepartment:
         response = client.post("/departments/",json={"name": "Backend", "parent_id": 999})
         assert response.status_code == 404
         assert "999" in response.json()["detail"]
+
+
+class TestDepartmentNameUniqueness:
+    def test_duplicate_name_same_parent(self, client):
+        """Two departments with same name under same parent should fail."""
+        # Create parent
+        parent = client.post("/departments/",json={"name": "Engineering"})
+        parent_id = parent.json()["id"]
+
+        # Create first child
+        client.post("/departments/", json={"name": "Backend", "parent_id": parent_id})
+
+        # Create duplicate child
+        response = client.post("/departments/", json={"name": "Backend", "parent_id": parent_id})
+
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"].lower()
+
+    def test_same_name_different_parents(self, client):
+        """Same name under different parents should be allowed."""
+        parent1 = client.post("/departments/", json={"name": "Engineering"})
+        parent1_id = parent1.json()["id"]
+
+        parent2 = client.post("/departments/", json={"name": "Product"})
+        parent2_id = parent2.json()["id"]
+
+        r1 = client.post("/departments/", json={"name": "Team", "parent_id": parent1_id})
+        r2 = client.post("/departments/", json={"name": "Team", "parent_id": parent2_id})
+
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+
+    def test_duplicate_root_name(self, client):
+        """Two root departments with same name should fail (service-level check)."""
+        client.post("/departments/", json={"name": "Operations"})
+        response = client.post("/departments/", json={"name": "Operations"})
+
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"].lower()
