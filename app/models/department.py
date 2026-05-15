@@ -24,10 +24,10 @@ class Department(Base):
         "Department", back_populates="children", remote_side=[id]
     )
     children: Mapped[List["Department"]] = relationship(
-        "Department", back_populates="parent"
+        "Department", back_populates="parent", passive_deletes=True
     )
 
     # Employees
     employees: Mapped[List["Employee"]] = relationship(
-        "Employee", back_populates="department"
+        "Employee", back_populates="department", passive_deletes=True
     )

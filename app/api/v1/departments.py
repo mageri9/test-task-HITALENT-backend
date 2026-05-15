@@ -37,7 +37,7 @@ def get(
     """Get department with subtree and employees."""
     return get_department(
         db=db,
-        id=department_id,
+        department_id=department_id,
         depth=depth,
         include_employees=include_employees,
     )

@@ -24,5 +24,5 @@ class Employee(Base):
 
     # Department
     department: Mapped["Department"] = relationship(
-        "Department", back_populates="employees"
+        "Department", back_populates="employees", passive_deletes=True
     )

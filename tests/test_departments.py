@@ -159,3 +159,78 @@ class TestDepartmentMove:
         response = client.patch(f"/departments/{dept_id}", json={"parent_id": 999})
 
         assert response.status_code == 404
+
+class TestDeleteDepartmentCascade:
+    def test_delete_empty_department(self, client):
+        """Delete a department with no children or employees."""
+        dept = client.post("/departments/", json={"name": "Empty"})
+        dept_id = dept.json()["id"]
+
+        response = client.delete(f"/departments/{dept_id}?mode=cascade")
+
+        assert response.status_code == 204
+
+        # Verify department is gone
+        get_response = client.get(f"/departments/{dept_id}")
+        assert get_response.status_code == 404
+
+    def test_delete_with_employees(self, client):
+        """Cascade delete removes department and its employees."""
+        dept = client.post("/departments/", json={"name": "With Employees"})
+        dept_id = dept.json()["id"]
+
+        client.post(
+            f"/departments/{dept_id}/employees",
+            json={"full_name": "Alice", "position": "Dev"},
+        )
+        client.post(
+            f"/departments/{dept_id}/employees",
+            json={"full_name": "Bob", "position": "QA"},
+        )
+
+        response = client.delete(f"/departments/{dept_id}?mode=cascade")
+
+        assert response.status_code == 204
+
+        # Department and employees are gone
+        assert client.get(f"/departments/{dept_id}").status_code == 404
+
+    def test_delete_full_tree(self, client):
+        """Cascade delete removes entire subtree with employees at all levels.
+
+        Tree:
+            A (has emp_A)
+            └── B (has emp_B)
+                └── C (has emp_C)
+
+        Delete A → everything gone.
+        """
+        # Build tree
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+        client.post(
+            f"/departments/{a_id}/employees",
+            json={"full_name": "Emp A", "position": "Dev"},
+        )
+
+        b = client.post(f"/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+        client.post(
+            f"/departments/{b_id}/employees",
+            json={"full_name": "Emp B", "position": "Dev"},
+        )
+
+        c = client.post("/departments/", json={"name": "C", "parent_id": b_id})
+        c_id = c.json()["id"]
+        client.post(
+            f"/departments/{c_id}/employees",
+            json={"full_name": "Emp C", "position": "Dev"},
+        )
+
+        # Delete root
+        response = client.delete(f"/departments/{a_id}?mode=cascade")
+        assert response.status_code == 204
+
+        # All departments are gone
+        for dep_id in [a_id, b_id, c_id]:
+            assert client.get(f"/departments/{dep_id}").status_code == 404
