@@ -1,6 +1,3 @@
-from http.client import responses
-
-
 class TestCreateDepartment:
     def test_success(self, client):
         response = client.post(
@@ -234,3 +231,171 @@ class TestDeleteDepartmentCascade:
         # All departments are gone
         for dep_id in [a_id, b_id, c_id]:
             assert client.get(f"/departments/{dep_id}").status_code == 404
+
+
+class TestDeleteDepartmentReassign:
+    def test_reassign_employees(self, client):
+        """Employees move to target department when their department is deleted.
+
+        Tree:  A,  B (has employees)
+        Delete B, reassign to A → employees now in A.
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+
+        b = client.post("/departments/", json={"name": "B"})
+        b_id = b.json()["id"]
+
+        client.post(
+            f"/departments/{b_id}/employees/",
+            json={"full_name": "Alice", "position": "Dev"},
+        )
+        client.post(
+            f"/departments/{b_id}/employees/",
+            json={"full_name": "Bob", "position": "QA"},
+        )
+
+        response = client.delete(
+            f"/departments/{b_id}?mode=reassign&reassign_to_department_id={a_id}",
+        )
+        assert response.status_code == 204
+
+        # B is gone
+        assert client.get(f"/departments/{b_id}").status_code == 404
+
+        # Employees are now in A
+        a_tree = client.get(f"/departments/{a_id}?include_employees=true").json()
+        employee_names = [e["full_name"] for e in a_tree["employees"]]
+        assert "Alice" in employee_names
+        assert "Bob" in employee_names
+
+    def test_reassign_children_move_up(self, client):
+        """Child departments move to grandparent when parent is deleted.
+
+        Tree:  A → B → C
+        Delete B, reassign employees to A → C becomes child of A.
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+
+        b = client.post("/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+
+        c = client.post("/departments/", json={"name": "C", "parent_id": b_id})
+        c_id = c.json()["id"]
+
+        response = client.delete(
+            f"/departments/{b_id}?mode=reassign&reassign_to_department_id={a_id}",
+        )
+        assert response.status_code == 204
+
+        # B is gone
+        assert client.get(f"/departments/{b_id}").status_code == 404
+
+        # C is now child of A
+        a_tree = client.get(f"/departments/{a_id}?depth=2").json()
+        child_ids = [c["id"] for c in a_tree["children"]]
+        assert c_id in child_ids
+
+    def test_reassign_full_tree(self, client):
+        """Full reassign scenario: employees + children + employees in children.
+
+        Tree:
+            A
+            └── B (has emp_B)
+                └── C (has emp_C)
+
+        Delete B, reassign to A:
+        - emp_B → A
+        - C → child of A (with emp_C intact)
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+
+        b = client.post("/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+        client.post(
+            f"/departments/{b_id}/employees/",
+            json={"full_name": "Emp B", "position": "Dev"},
+        )
+
+        c = client.post("/departments/", json={"name": "C", "parent_id": b_id})
+        c_id = c.json()["id"]
+        client.post(
+            f"/departments/{c_id}/employees/",
+            json={"full_name": "Emp C", "position": "QA"},
+        )
+
+        response = client.delete(
+            f"/departments/{b_id}?mode=reassign&reassign_to_department_id={a_id}",
+        )
+        assert response.status_code == 204
+
+        # B is gone
+        assert client.get(f"/departments/{b_id}").status_code == 404
+
+        # A tree check
+        a_tree = client.get(f"/departments/{a_id}?depth=3&include_employees=true").json()
+
+        # emp_B moved to A
+        a_emp_names = [e["full_name"] for e in a_tree["employees"]]
+        assert "Emp B" in a_emp_names
+
+        # C is child of A
+        child_ids = [c["id"] for c in a_tree["children"]]
+        assert c_id in child_ids
+
+        # emp_C still in C
+        c_node = next(c for c in a_tree["children"] if c["id"] == c_id)
+        c_emp_names = [e["full_name"] for e in c_node["employees"]]
+        assert "Emp C" in c_emp_names
+
+    def test_reassign_without_target(self, client):
+        """reassign mode without reassign_to_department_id should fail."""
+        dept = client.post("/departments/", json={"name": "A"})
+        dept_id = dept.json()["id"]
+
+        response = client.delete(
+            f"/departments/{dept_id}?mode=reassign",
+        )
+        assert response.status_code == 422
+
+    def test_reassign_to_nonexistent(self, client):
+        """Reassign to nonexistent department should return 404."""
+        dept = client.post("/departments/", json={"name": "A"})
+        dept_id = dept.json()["id"]
+
+        response = client.delete(
+            f"/departments/{dept_id}?mode=reassign&reassign_to_department_id=999",
+        )
+        assert response.status_code == 404
+
+    def test_reassign_to_self(self, client):
+        """Cannot reassign to the department being deleted."""
+        dept = client.post("/departments/", json={"name": "A"})
+        dept_id = dept.json()["id"]
+
+        response = client.delete(
+            f"/departments/{dept_id}?mode=reassign&reassign_to_department_id={dept_id}",
+        )
+        assert response.status_code == 409
+
+    def test_reassign_to_descendant(self, client):
+        """Cannot reassign to a descendant of the department being deleted.
+
+        Tree:  A → B → C
+        Delete B with reassign_to=C → 409.
+        """
+        a = client.post("/departments/", json={"name": "A"})
+        a_id = a.json()["id"]
+
+        b = client.post("/departments/", json={"name": "B", "parent_id": a_id})
+        b_id = b.json()["id"]
+
+        c = client.post("/departments/", json={"name": "C", "parent_id": b_id})
+        c_id = c.json()["id"]
+
+        response = client.delete(
+            f"/departments/{b_id}?mode=reassign&reassign_to_department_id={c_id}",
+        )
+        assert response.status_code == 409
