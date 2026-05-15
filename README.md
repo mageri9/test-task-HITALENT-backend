@@ -35,8 +35,8 @@ API для управления организационной структур�
 ### 1. Клонировать репозиторий
 
 ```bash
-git clone <repo_url>
-cd <project_directory>
+git clone https://github.com/mageri9/test-task-HITALENT-backend.git
+cd test-task-HITALENT-backend
 ````
 
 ### 2. Запустить проект
