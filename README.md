@@ -374,6 +374,39 @@ org_structure_test
 
 ---
 
+## Логирование
+
+Приложение использует стандартный модуль Python `logging`.
+
+Логируются:
+
+* создание подразделений
+* обновление подразделений
+* операции удаления (`cascade` / `reassign`)
+* создание сотрудников
+* попытки создать цикл в дереве подразделений
+* domain exceptions (`404`, `409`)
+
+Формат логов:
+
+```text
+timestamp | level | module | message
+```
+
+Пример:
+
+```text
+2026-05-16 18:42:11 | INFO | app.services.department_service | Creating department 'Backend' (parent_id=1)
+2026-05-16 18:45:03 | WARNING | app.services.department_service | Cycle detected: department=1 parent=3
+2026-05-16 18:45:03 | ERROR | app.core.handlers | ConflictException: Cannot move department into its descendant
+```
+
+Просмотр логов контейнера:
+
+```bash
+docker compose logs app
+```
+
 ## Healthcheck
 
 ```http
