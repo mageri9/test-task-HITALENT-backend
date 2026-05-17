@@ -5,6 +5,10 @@ from app.models.department import Department
 from app.models.employee import Employee
 from app.schemas.employee import EmployeeCreate
 
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 def create_employee(
         db: Session,
@@ -28,6 +32,7 @@ def create_employee(
         position=data.position,
         hired_at=data.hired_at,
     )
+    logger.info("Creating employee '%s' in department id=%s", data.full_name, department_id)
     db.add(employee)
     db.commit()
     db.refresh(employee)

@@ -14,6 +14,8 @@ from app.core.handlers import (
 from app.api.v1.departments import router as department_router
 from app.api.v1.employees import router as employees_router
 
+import app.core.logging # noqa: F401
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

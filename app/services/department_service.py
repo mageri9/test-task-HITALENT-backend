@@ -6,7 +6,9 @@ from app.models import Employee
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
 from app.core.exceptions import ConflictException, NotFoundException
 
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _check_name_unique(
         db: Session,
@@ -63,6 +65,7 @@ def create_department(db: Session, data: DepartmentCreate) -> Department:
         name=data.name,
         parent_id=data.parent_id,
     )
+    logger.info("Creating department '%s' (parent_id=%s)", data.name, data.parent_id)
     db.add(department)
     db.commit()
     db.refresh(department)
@@ -210,6 +213,7 @@ def update_department(
         department_id: int,
         data: "DepartmentUpdate",
 ) -> Department:
+    logger.info("Updating department id=%s", department_id)
     department = db.query(Department).filter(Department.id == department_id).first()
     if department is None:
         raise NotFoundException(f"Department with id {department_id} not found")
@@ -230,6 +234,7 @@ def update_department(
 
             descendants = _get_descendant_ids(db, department_id)
             if new_parent_id in descendants:
+                logger.warning("Cycle detected: department=%s parent=%s", department_id, new_parent_id)
                 raise ConflictException("Cannot move department into its own subtree")
 
         department.parent_id = new_parent_id
@@ -255,6 +260,7 @@ def delete_department_cascade(db: Session, department_id: int) -> None:
     if department is None:
         raise NotFoundException(f"Department with id {department_id} not found.")
 
+    logger.info("Cascade deleting department id=%s", department_id)
     db.delete(department)
     db.commit()
 
@@ -264,6 +270,7 @@ def delete_department_reassign(
         reassign_to_id: int,
 ) -> None:
     """Delete department, reassign employees and children before removal."""
+    logger.info("Reassign-deleting department id=%s to id=%s", department_id, reassign_to_id)
     department = db.query(Department).filter(Department.id == department_id).first()
 
     if department is None:
